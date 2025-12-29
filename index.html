@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Bingo Nochevieja ✨</title>
+    <link rel="stylesheet" href="estilos.css">
+    <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.5.1/dist/confetti.browser.min.js"></script>
+</head>
+<body>
+    <h1>✨ BINGO 2026 ✨</h1>
+
+    <div id="pantalla-lobby">
+        <div id="seccion-registro">
+            <form id="form-registro">
+                <input type="text" id="input-nombre" placeholder="Tu nombre..." required autofocus>
+                <button type="submit">Entrar al Lobby 🚪</button>
+            </form>
+        </div>
+
+        <div id="seccion-casillas" style="display: none;">
+            <h3>✍️ Predicciones de la noche</h3>
+            <p id="instrucciones-meta"></p>
+            <div id="contenedor-inputs-casillas"></div>
+            <button id="btn-confirmar-frases" style="display:none; width: 100%;">¡Listo para jugar! ✅</button>
+        </div>
+    </div>
+
+    <div id="pantalla-juego" style="display: none;">
+        <div id="scoreboard">
+            <ul id="lista-puntos"></ul>
+        </div>
+        <div id="tablero"></div>
+
+        <div id="panel-voto" style="display: none;">
+            <div class="panel-contenido">
+                <h2 id="texto-voto"></h2>
+                <div style="display: flex; gap: 20px; justify-content: center; margin-top: 20px;">
+                    <button id="btn-si" onclick="enviarVoto('si', 'btn-si')" style="background: #22c55e; color: white;">SÍ ✅</button>
+                    <button id="btn-no" onclick="enviarVoto('no', 'btn-no')" style="background: #ef4444; color: white;">NO ❌</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="script.js"></script>
+    <div style="margin-top: 50px; opacity: 0.3;">
+        <button onclick="reinicioMaestro()" style="background: none; color: white; border: 1px solid white; font-size: 10px;">Reset Maestro</button>
+    </div>
+</body>
+</html>
