@@ -57,14 +57,22 @@ async function enviarRegistro(nombre) {
         body: JSON.stringify({ nombre: nombre })
     });
     const datos = await respuesta.json();
+    
     if (datos.status === "error") {
         alert(datos.mensaje);
     } else {
         miNombre = nombre;
         localStorage.setItem("nombreBingo", miNombre);
-        // Solo mostramos el mensaje de espera. 
-        // Las cajas aparecerán automáticamente cuando el Socket reciba la orden.
-        document.getElementById('seccion-registro').innerHTML = "⏳ Esperando a que se llene la sala...";
+        
+        if (datos.fase === "ESCRITURA") {
+            // Si el servidor ya cerró la sala, vamos directo a escribir
+            document.getElementById('seccion-registro').style.display = "none";
+            document.getElementById('seccion-casillas').style.display = "block";
+            generarCamposEscritura(datos.jugadores);
+        } else {
+            // Si no, nos quedamos esperando
+            document.getElementById('seccion-registro').innerHTML = "⏳ Esperando a que se llene la sala...";
+        }
     }
 }
 
@@ -176,5 +184,6 @@ function mostrarPantallaFinal(ganador, puntuaciones, titulo = "👑 ¡Fin de la 
 function reinicioMaestro() {
     fetch('https://bingo-backend-rdqx.onrender.com/reset-total', { method: 'POST' });
 }
+
 
 
