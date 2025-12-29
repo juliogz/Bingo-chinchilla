@@ -5,6 +5,7 @@ const panelVoto = document.getElementById('panel-voto');
 socket.onmessage = (event) => {
     const datos = JSON.parse(event.data);
 
+    // CENTRALIZADO: El socket es el único que manda dibujar las cajas
     if (datos.tipo === "FASE_ESCRITURA") {
         document.getElementById('seccion-registro').style.display = "none";
         document.getElementById('seccion-casillas').style.display = "block";
@@ -42,7 +43,11 @@ socket.onmessage = (event) => {
     }
 
     if (datos.tipo === "ACTUALIZACION_MARCADOR") actualizarMarcador(datos.puntuaciones);
-    if (datos.tipo === "RESET_GLOBAL") { localStorage.clear(); location.reload(); }
+    
+    if (datos.tipo === "RESET_GLOBAL") { 
+        localStorage.clear(); 
+        location.reload(); 
+    }
 };
 
 async function enviarRegistro(nombre) {
@@ -52,10 +57,13 @@ async function enviarRegistro(nombre) {
         body: JSON.stringify({ nombre: nombre })
     });
     const datos = await respuesta.json();
-    if (datos.status === "error") alert(datos.mensaje);
-    else {
+    if (datos.status === "error") {
+        alert(datos.mensaje);
+    } else {
         miNombre = nombre;
         localStorage.setItem("nombreBingo", miNombre);
+        // Solo mostramos el mensaje de espera. 
+        // Las cajas aparecerán automáticamente cuando el Socket reciba la orden.
         document.getElementById('seccion-registro').innerHTML = "⏳ Esperando a que se llene la sala...";
     }
 }
@@ -69,18 +77,16 @@ document.getElementById('form-registro').onsubmit = (e) => {
 function generarCamposEscritura(jugadores) {
     const contenedor = document.getElementById('contenedor-inputs-casillas');
     
-    // ESTA LÍNEA ES LA QUE FALTA O ESTÁ FALLANDO:
-    // Borra todo lo anterior antes de dibujar lo nuevo
-    contenedor.innerHTML = ""; 
+    // LIMPIEZA TOTAL: Evita que al entrar el 2º jugador se dupliquen las cajas
+    contenedor.innerHTML = "";
     
-    // Filtramos para no escribir sobre nosotros mismos
     const otrosJugadores = jugadores.filter(j => j !== miNombre);
     
     otrosJugadores.forEach(nombre => {
         crearInputFrase(contenedor, `Sobre ${nombre}:`);
     });
     
-    // Añadimos la caja general al final
+    // Caja general (solo una al final)
     crearInputFrase(contenedor, "General:");
     
     document.getElementById('btn-confirmar-frases').style.display = "block";
