@@ -7,10 +7,9 @@ import json
 app = FastAPI()
 
 # --- CONFIGURACIÓN ---
-MIN_JUGADORES = 2  # <--- ¡CAMBIA ESTO AL TOTAL DE PERSONAS QUE SERÉIS!
+MIN_JUGADORES = 2  # <--- ¡AJUSTA ESTO AL TOTAL DE TU FAMILIA!
 # ---------------------
 
-jugadores = []
 puntuaciones: Dict[str, int] = {}
 jugadores_listos = []
 juego_iniciado = False
@@ -36,26 +35,33 @@ async def avisar_a_todos(data: dict):
         try:
             await ws.send_json(data)
         except:
-            websockets.remove(ws)
+            if ws in websockets:
+                websockets.remove(ws)
 
 @app.post("/unirse")
 async def unirse_juego(jugador: Jugador):
     global juego_iniciado, meta_victoria
     nombre = jugador.nombre
     
-    # Cerrojazo: si ya llegamos al número o el juego ya arrancó
-    if (len(puntuaciones) >= MIN_JUGADORES or juego_iniciado) and nombre not in puntuaciones:
-        return {"status": "error", "mensaje": "La sala está llena o la partida ya comenzó"}
+    # 1. SI YA ESTÁ DENTRO, dejamos que pase (por si refresca F5)
+    if nombre in puntuaciones:
+        return {"status": "ok"}
 
-    if nombre not in puntuaciones:
-        puntuaciones[nombre] = 0
+    # 2. SI LA SALA ESTÁ LLENA O YA EMPEZÓ, bloqueamos de verdad
+    if len(puntuaciones) >= MIN_JUGADORES or juego_iniciado:
+        return {"status": "error", "mensaje": "SALA LLENA: Ya sois " + str(len(puntuaciones)) + " jugadores."}
+
+    # 3. SI PASA LOS FILTROS, LO REGISTRAMOS
+    puntuaciones[nombre] = 0
     
     await avisar_a_todos({"tipo": "ACTUALIZACION_MARCADOR", "puntuaciones": puntuaciones})
     
-    # Si con este nuevo llegamos al mínimo, activamos la fase de escritura
-    if len(puntuaciones) >= MIN_JUGADORES:
+    # 4. CUANDO LLEGAMOS AL TOPE, CERRAMOS PUERTAS Y LANZAMOS ESCRITURA
+    if len(puntuaciones) == MIN_JUGADORES:
         juego_iniciado = True
         meta_victoria = len(puntuaciones)
+        # Un pequeño delay para asegurar que el socket está listo
+        await asyncio.sleep(0.5)
         await avisar_a_todos({
             "tipo": "FASE_ESCRITURA", 
             "meta": meta_victoria, 
@@ -88,7 +94,7 @@ async def votar(voto: Voto):
         votos_actuales[voto.eleccion] += 1
         votos_actuales["votantes"].append(voto.nombre_jugador)
     
-    # Se cierra la votación cuando todos (menos el que reclama) votan
+    # Se cierra cuando todos votan (menos el que reclama)
     if len(votos_actuales["votantes"]) >= (len(puntuaciones) - 1):
         aprobado = votos_actuales["si"] > votos_actuales["no"]
         if aprobado:
@@ -110,7 +116,7 @@ async def votar(voto: Voto):
 
 @app.post("/reset-total")
 async def reset_total():
-    global puntuaciones, jugadores_listos, juego_iniciado, websockets
+    global puntuaciones, jugadores_listos, juego_iniciado
     puntuaciones = {}
     jugadores_listos = []
     juego_iniciado = False
@@ -127,3 +133,4 @@ async def websocket_endpoint(websocket: WebSocket):
     except WebSocketDisconnect:
         if websocket in websockets:
             websockets.remove(websocket)
+
