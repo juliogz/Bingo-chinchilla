@@ -1,4 +1,4 @@
-const socket = new WebSocket('ws://localhost:8000/ws');
+const socket = new WebSocket('ws://bingo-backend-rdqx.onrender.com/ws');
 let miNombre = localStorage.getItem("nombreBingo");
 const panelVoto = document.getElementById('panel-voto');
 
@@ -47,7 +47,7 @@ socket.onmessage = (event) => {
 };
 
 async function enviarRegistro(nombre) {
-    const respuesta = await fetch('http://localhost:8000/unirse', {
+    const respuesta = await fetch(' https://bingo-backend-rdqx.onrender.com/unirse', {
         method: 'POST',
         headers: {'Content-Type': 'application/json'},
         body: JSON.stringify({ nombre: nombre })
@@ -96,7 +96,7 @@ function crearInputFrase(padre, etiqueta) {
 document.getElementById('btn-confirmar-frases').onclick = () => {
     const frases = Array.from(document.querySelectorAll('.input-frase')).map(i => i.value).filter(v => v);
     localStorage.setItem("bingo_mis_frases", JSON.stringify(frases));
-    fetch('http://localhost:8000/listo-para-jugar', {
+    fetch(' https://bingo-backend-rdqx.onrender.com/listo-para-jugar', {
         method: 'POST',
         headers: {'Content-Type': 'application/json'},
         body: JSON.stringify({ nombre: miNombre })
@@ -115,7 +115,7 @@ function dibujarTableroBingo() {
         div.innerText = f;
         div.onclick = () => {
             if (confirm(`¿Seguro que ha pasado: "${f}"?`)) {
-                fetch('http://localhost:8000/iniciar-votacion', {
+                fetch(' https://bingo-backend-rdqx.onrender.com/iniciar-votacion', {
                     method: 'POST',
                     headers: {'Content-Type': 'application/json'},
                     body: JSON.stringify({casilla_id: div.id, nombre_jugador: miNombre, texto: f})
@@ -129,7 +129,7 @@ function dibujarTableroBingo() {
 function enviarVoto(eleccion, idBtn) {
     resetearBotonesVoto();
     document.getElementById(idBtn).classList.add('seleccionado');
-    fetch('http://localhost:8000/votar', {
+    fetch(' https://bingo-backend-rdqx.onrender.com/votar', {
         method: 'POST',
         headers: {'Content-Type': 'application/json'},
         body: JSON.stringify({eleccion, nombre_jugador: miNombre})
@@ -164,6 +164,5 @@ function mostrarPantallaFinal(ganador, puntuaciones, titulo = "👑 ¡Fin de la 
 }
 
 function reinicioMaestro() {
-    fetch(' https://bingo-backend-rdqx.onrender.com', { method: 'POST' });
-
+    fetch(' https://bingo-backend-rdqx.onrender.com/reset-total', { method: 'POST' });
 }
