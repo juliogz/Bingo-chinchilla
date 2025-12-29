@@ -8,7 +8,6 @@ socket.onmessage = (event) => {
     if (datos.tipo === "FASE_ESCRITURA") {
         document.getElementById('seccion-registro').style.display = "none";
         document.getElementById('seccion-casillas').style.display = "block";
-        // Pasamos la lista de jugadores para saber a quién etiquetar
         generarCamposEscritura(datos.jugadores);
     }
 
@@ -63,25 +62,18 @@ async function enviarRegistro(nombre) {
 
 document.getElementById('form-registro').onsubmit = (e) => {
     e.preventDefault();
-    if (socket.readyState !== 1) return alert("Conectando...");
+    if (socket.readyState !== 1) return alert("Conectando al servidor... Por favor, espera unos segundos a que despierte.");
     enviarRegistro(document.getElementById('input-nombre').value);
 };
 
 function generarCamposEscritura(jugadores) {
     const contenedor = document.getElementById('contenedor-inputs-casillas');
     contenedor.innerHTML = "";
-    
-    // Filtramos para que no aparezca nuestro nombre
     const otrosJugadores = jugadores.filter(j => j !== miNombre);
-    
-    // Creamos un input por cada compañero
     otrosJugadores.forEach(nombre => {
         crearInputFrase(contenedor, `Sobre ${nombre}:`);
     });
-
-    // Añadimos el "General"
     crearInputFrase(contenedor, "General:");
-
     document.getElementById('btn-confirmar-frases').style.display = "block";
 }
 
@@ -101,7 +93,7 @@ document.getElementById('btn-confirmar-frases').onclick = () => {
         headers: {'Content-Type': 'application/json'},
         body: JSON.stringify({ nombre: miNombre })
     });
-    document.getElementById('seccion-casillas').innerHTML = "⏳ Esperando al resto...";
+    document.getElementById('seccion-casillas').innerHTML = "⏳ Esperando al resto de jugadores...";
 };
 
 function dibujarTableroBingo() {
@@ -137,12 +129,15 @@ function enviarVoto(eleccion, idBtn) {
 }
 
 function resetearBotonesVoto() {
-    document.getElementById('btn-si').classList.remove('seleccionado');
-    document.getElementById('btn-no').classList.remove('seleccionado');
+    const btnSi = document.getElementById('btn-si');
+    const btnNo = document.getElementById('btn-no');
+    if(btnSi) btnSi.classList.remove('seleccionado');
+    if(btnNo) btnNo.classList.remove('seleccionado');
 }
 
 function actualizarMarcador(puntos) {
     const lista = document.getElementById('lista-puntos');
+    if (!lista) return;
     lista.innerHTML = "";
     Object.entries(puntos).forEach(([n, p]) => {
         const li = document.createElement('li');
@@ -160,10 +155,10 @@ function mostrarPantallaFinal(ganador, puntuaciones, titulo = "👑 ¡Fin de la 
     finalDiv.innerHTML = `<h1>${titulo}</h1><h2>Ganador: ${ganador}</h2><div class="ranking">${ranking}</div>
                           <button onclick="reinicioMaestro()">Reiniciar Todo</button>`;
     document.body.appendChild(finalDiv);
-    confetti();
+    if (typeof confetti === 'function') confetti();
 }
 
 function reinicioMaestro() {
     fetch('https://bingo-backend-rdqx.onrender.com/reset-total', { method: 'POST' });
-
 }
+
