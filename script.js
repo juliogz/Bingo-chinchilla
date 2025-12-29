@@ -1,13 +1,11 @@
 const URL_BASE = 'https://bingo-backend-rdqx.onrender.com'; 
 const socket = new WebSocket(URL_BASE.replace('https', 'wss') + '/ws');
-const MIN_JUGADORES = 2; // Asegúrate de que coincida con el backend
+const MIN_JUGADORES = 2; 
 
 let miNombre = localStorage.getItem("nombreBingo");
 
-// Al cargar la página, si ya teníamos nombre, intentamos entrar automáticamente (Soporte F5)
 window.onload = () => {
     if (miNombre) {
-        console.log("Reconectando a:", miNombre);
         enviarRegistro(miNombre);
     }
 };
@@ -16,10 +14,9 @@ socket.onmessage = (event) => {
     const datos = JSON.parse(event.data);
 
     if (datos.tipo === "ACTUALIZACION_LOBBY") {
-        const seccionRegistro = document.getElementById('seccion-registro');
-        // Solo actualizamos el contador si el usuario ya envió su nombre y está esperando
-        if (miNombre && seccionRegistro.innerHTML.includes("Esperando")) {
-            seccionRegistro.innerHTML = `⏳ Esperando a que se llene la sala (${datos.jugadores.length}/${datos.total_necesario})...`;
+        const registro = document.getElementById('seccion-registro');
+        if (miNombre && registro.innerHTML.includes("Esperando")) {
+            registro.innerHTML = `⏳ Esperando a que se llene la sala (${datos.jugadores.length}/${datos.total_necesario})...`;
         }
     }
 
@@ -28,9 +25,7 @@ socket.onmessage = (event) => {
     }
 
     if (datos.tipo === "EMPEZAR_JUEGO") {
-        document.getElementById('pantalla-lobby').style.display = "none";
-        document.getElementById('pantalla-juego').style.display = "block";
-        dibujarTableroBingo();
+        irATablero();
     }
 
     if (datos.tipo === "NUEVA_VOTACION") {
@@ -71,14 +66,28 @@ async function enviarRegistro(nombre) {
         const datos = await respuesta.json();
 
         if (datos.status === "ok") {
-            if (datos.empezar) {
-                mostrarSeccionEscritura(datos.jugadores);
+            if (datos.fase === "TABLERO") {
+                irATablero();
+            } else if (datos.fase === "ESCRITURA") {
+                if (datos.ya_listo) {
+                    document.getElementById('seccion-registro').style.display = "none";
+                    document.getElementById('seccion-casillas').style.display = "block";
+                    document.getElementById('seccion-casillas').innerHTML = "⏳ Frases enviadas. Esperando al resto...";
+                } else {
+                    mostrarSeccionEscritura(datos.jugadores);
+                }
             } else {
                 document.getElementById('seccion-registro').innerHTML = 
                     `⏳ Esperando a que se llene la sala (${datos.jugadores.length}/${MIN_JUGADORES})...`;
             }
         }
-    } catch (e) { console.error("Error al unirse", e); }
+    } catch (e) { console.error(e); }
+}
+
+function irATablero() {
+    document.getElementById('pantalla-lobby').style.display = "none";
+    document.getElementById('pantalla-juego').style.display = "block";
+    dibujarTableroBingo();
 }
 
 function mostrarSeccionEscritura(listaJugadores) {
@@ -112,7 +121,7 @@ document.getElementById('btn-confirmar-frases').onclick = () => {
         headers: {'Content-Type': 'application/json'},
         body: JSON.stringify({ nombre: miNombre })
     });
-    document.getElementById('seccion-casillas').innerHTML = "⏳ Esperando al resto de jugadores...";
+    document.getElementById('seccion-casillas').innerHTML = "⏳ Frases enviadas. Esperando al resto...";
 };
 
 function dibujarTableroBingo() {
@@ -166,6 +175,28 @@ function actualizarMarcador(puntos) {
     });
 }
 
+function mostrarPantallaFinal(ganador, puntuaciones) {
+    document.getElementById('pantalla-juego').style.display = "none";
+    let finalDiv = document.getElementById('pantalla-final');
+    if (!finalDiv) {
+        finalDiv = document.createElement('div');
+        finalDiv.id = "pantalla-final";
+        document.body.appendChild(finalDiv);
+    }
+    finalDiv.style.display = "block";
+    
+    const ranking = Object.entries(puntuaciones).sort((a,b)=>b[1]-a[1])
+        .map(([n,p], i) => `<div>${i===0?'🥇':''} ${n}: ${p} pts</div>`).join("");
+        
+    finalDiv.innerHTML = `
+        <div style="text-align:center; padding:50px; color:white; background:rgba(0,0,0,0.9); position:fixed; top:0; left:0; width:100%; height:100%; z-index:9999;">
+            <h1>👑 ¡FIN DE LA PARTIDA! 👑</h1>
+            <h2>Ha ganado: ${ganador}</h2>
+            <div style="margin:20px 0; font-size:1.5rem;">${ranking}</div>
+            <button onclick="reinicioMaestro()" style="padding:15px 30px; font-size:1.2rem; cursor:pointer;">Reiniciar Juego</button>
+        </div>`;
+}
+
 function reinicioMaestro() {
     fetch(`${URL_BASE}/reset-total`, { method: 'POST' });
 }
@@ -174,6 +205,7 @@ document.getElementById('form-registro').onsubmit = (e) => {
     e.preventDefault();
     enviarRegistro(document.getElementById('input-nombre').value);
 };
+
 
 
 
