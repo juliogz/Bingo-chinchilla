@@ -1,22 +1,23 @@
-import asyncio
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
-from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
-from typing import List, Dict, Set, Optional, Any
-from datetime import datetime
+from typing import List, Dict
+import asyncio
+import json
 
 app = FastAPI()
 
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
+# --- CONFIGURACIÓN ---
+MIN_JUGADORES = 2  # <--- ¡CAMBIA ESTO AL TOTAL DE PERSONAS QUE SERÉIS!
+# ---------------------
 
-# --- CONFIGURACIÓN DE TIEMPO ---
-FECHA_FIN = datetime(2026, 1, 1, 16, 0, 0)
+jugadores = []
+puntuaciones: Dict[str, int] = {}
+jugadores_listos = []
+juego_iniciado = False
+meta_victoria = 0
+frase_actual = {"texto": "", "nombre": "", "casilla_id": ""}
+votos_actuales = {"si": 0, "no": 0, "votantes": []}
+websockets: List[WebSocket] = []
 
 class Jugador(BaseModel):
     nombre: str
@@ -25,85 +26,36 @@ class Voto(BaseModel):
     eleccion: str
     nombre_jugador: str
 
-class InicioVotacion(BaseModel):
+class Reclamo(BaseModel):
     casilla_id: str
     nombre_jugador: str
     texto: str
 
-conexiones_activas: List[WebSocket] = []
-puntuaciones: Dict[str, int] = {} 
-jugadores_listos: Set[str] = set()
-juego_iniciado = False
-meta_victoria: Optional[int] = None 
-MIN_JUGADORES = 2 
-
-votos_actuales: Dict[str, str] = {}
-estado_voto: Dict[str, Any] = {"casilla_id": None, "autor": None}
-
-async def avisar_a_todos(mensaje: dict):
-    for conexion in conexiones_activas:
-        try: await conexion.send_json(mensaje)
-        except: pass
-
-async def finalizar_votacion():
-    global meta_victoria 
-    autor = estado_voto["autor"]
-    if isinstance(autor, str) and autor in puntuaciones:
-        si = list(votos_actuales.values()).count("si")
-        no = list(votos_actuales.values()).count("no")
-        aprobado = si >= no
-        ganador_partida = None
-        if aprobado:
-            puntuaciones[autor] += 1
-            if meta_victoria and puntuaciones[autor] >= meta_victoria:
-                ganador_partida = autor
-        await avisar_a_todos({
-            "tipo": "RESULTADO_FINAL",
-            "aprobado": aprobado,
-            "casilla_id": estado_voto["casilla_id"],
-            "jugador_que_reclamo": autor,
-            "puntuaciones": puntuaciones,
-            "ganador_partida": ganador_partida
-        })
-    estado_voto["casilla_id"] = None
-    estado_voto["autor"] = None
-    votos_actuales.clear()
-
-@app.websocket("/ws")
-async def websocket_endpoint(websocket: WebSocket):
-    await websocket.accept()
-    conexiones_activas.append(websocket)
-    try:
-        while True:
-            if datetime.now() >= FECHA_FIN:
-                await avisar_a_todos({"tipo": "FIN_TIEMPO", "puntuaciones": puntuaciones})
-            await websocket.receive_text()
-    except WebSocketDisconnect:
-        conexiones_activas.remove(websocket)
+async def avisar_a_todos(data: dict):
+    for ws in websockets:
+        try:
+            await ws.send_json(data)
+        except:
+            websockets.remove(ws)
 
 @app.post("/unirse")
 async def unirse_juego(jugador: Jugador):
     global juego_iniciado, meta_victoria
     nombre = jugador.nombre
     
-    # 1. Evitar que alguien entre si la partida ya empezó
-    if juego_iniciado and nombre not in puntuaciones:
-        return {"status": "error", "mensaje": "Partida en curso"}
-    
-    # 2. Registrar al jugador si es nuevo
+    # Cerrojazo: si ya llegamos al número o el juego ya arrancó
+    if (len(puntuaciones) >= MIN_JUGADORES or juego_iniciado) and nombre not in puntuaciones:
+        return {"status": "error", "mensaje": "La sala está llena o la partida ya comenzó"}
+
     if nombre not in puntuaciones:
         puntuaciones[nombre] = 0
     
-    # 3. Avisar a todos del nuevo marcador
     await avisar_a_todos({"tipo": "ACTUALIZACION_MARCADOR", "puntuaciones": puntuaciones})
     
-    # 4. CUANDO SE LLEGA AL MÍNIMO (o más):
-    # Enviamos a TODOS la lista actualizada de jugadores para que generen las cajas
+    # Si con este nuevo llegamos al mínimo, activamos la fase de escritura
     if len(puntuaciones) >= MIN_JUGADORES:
-        # No bloqueamos el juego_iniciado aquí para permitir que 
-        # la lista de cajas se actualice si entra un 3º o 4º jugador.
+        juego_iniciado = True
         meta_victoria = len(puntuaciones)
-        
         await avisar_a_todos({
             "tipo": "FASE_ESCRITURA", 
             "meta": meta_victoria, 
@@ -113,39 +65,65 @@ async def unirse_juego(jugador: Jugador):
     return {"status": "ok"}
 
 @app.post("/listo-para-jugar")
-async def jugador_listo(jugador: Jugador):
-    jugadores_listos.add(jugador.nombre)
+async def listo_para_jugar(jugador: Jugador):
+    if jugador.nombre not in jugadores_listos:
+        jugadores_listos.append(jugador.nombre)
+    
     if len(jugadores_listos) >= len(puntuaciones):
         await avisar_a_todos({"tipo": "EMPEZAR_JUEGO"})
     return {"status": "ok"}
 
 @app.post("/iniciar-votacion")
-async def iniciar_votacion(accion: InicioVotacion):
-    estado_voto["casilla_id"] = accion.casilla_id
-    estado_voto["autor"] = accion.nombre_jugador
-    votos_actuales.clear()
-    await avisar_a_todos({
-        "tipo": "NUEVA_VOTACION", 
-        "casilla_id": accion.casilla_id, 
-        "nombre": accion.nombre_jugador,
-        "texto": accion.texto
-    })
+async def iniciar_votacion(reclamo: Reclamo):
+    global frase_actual, votos_actuales
+    frase_actual = {"texto": reclamo.texto, "nombre": reclamo.nombre_jugador, "casilla_id": reclamo.casilla_id}
+    votos_actuales = {"si": 0, "no": 0, "votantes": []}
+    await avisar_a_todos({"tipo": "NUEVA_VOTACION", "texto": reclamo.texto, "nombre": reclamo.nombre_jugador})
     return {"status": "ok"}
 
 @app.post("/votar")
-async def registrar_voto(voto: Voto):
-    votos_actuales[voto.nombre_jugador] = voto.eleccion
-    if len(votos_actuales) >= len(puntuaciones):
-        await finalizar_votacion()
+async def votar(voto: Voto):
+    global votos_actuales
+    if voto.nombre_jugador not in votos_actuales["votantes"]:
+        votos_actuales[voto.eleccion] += 1
+        votos_actuales["votantes"].append(voto.nombre_jugador)
+    
+    # Se cierra la votación cuando todos (menos el que reclama) votan
+    if len(votos_actuales["votantes"]) >= (len(puntuaciones) - 1):
+        aprobado = votos_actuales["si"] > votos_actuales["no"]
+        if aprobado:
+            puntuaciones[frase_actual["nombre"]] += 1
+        
+        ganador_partida = None
+        if puntuaciones[frase_actual["nombre"]] >= meta_victoria:
+            ganador_partida = frase_actual["nombre"]
+
+        await avisar_a_todos({
+            "tipo": "RESULTADO_FINAL",
+            "aprobado": aprobado,
+            "puntuaciones": puntuaciones,
+            "jugador_que_reclamo": frase_actual["nombre"],
+            "casilla_id": frase_actual["casilla_id"],
+            "ganador_partida": ganador_partida
+        })
     return {"status": "ok"}
 
 @app.post("/reset-total")
-async def reset():
-    global puntuaciones, jugadores_listos, juego_iniciado, meta_victoria
-    puntuaciones.clear()
-    jugadores_listos.clear()
+async def reset_total():
+    global puntuaciones, jugadores_listos, juego_iniciado, websockets
+    puntuaciones = {}
+    jugadores_listos = []
     juego_iniciado = False
-    meta_victoria = None
     await avisar_a_todos({"tipo": "RESET_GLOBAL"})
-
     return {"status": "ok"}
+
+@app.websocket("/ws")
+async def websocket_endpoint(websocket: WebSocket):
+    await websocket.accept()
+    websockets.append(websocket)
+    try:
+        while True:
+            await websocket.receive_text()
+    except WebSocketDisconnect:
+        if websocket in websockets:
+            websockets.remove(websocket)
