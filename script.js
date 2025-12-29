@@ -1,15 +1,30 @@
 const URL_BASE = 'https://bingo-backend-rdqx.onrender.com'; 
 const socket = new WebSocket(URL_BASE.replace('https', 'wss') + '/ws');
+const MIN_JUGADORES = 2; // Asegúrate de que coincida con el backend
+
 let miNombre = localStorage.getItem("nombreBingo");
-const panelVoto = document.getElementById('panel-voto');
+
+// Al cargar la página, si ya teníamos nombre, intentamos entrar automáticamente (Soporte F5)
+window.onload = () => {
+    if (miNombre) {
+        console.log("Reconectando a:", miNombre);
+        enviarRegistro(miNombre);
+    }
+};
 
 socket.onmessage = (event) => {
     const datos = JSON.parse(event.data);
 
-    if (datos.tipo === "FASE_ESCRITURA") {
-        if (miNombre) {
-            mostrarSeccionEscritura(datos.jugadores);
+    if (datos.tipo === "ACTUALIZACION_LOBBY") {
+        const seccionRegistro = document.getElementById('seccion-registro');
+        // Solo actualizamos el contador si el usuario ya envió su nombre y está esperando
+        if (miNombre && seccionRegistro.innerHTML.includes("Esperando")) {
+            seccionRegistro.innerHTML = `⏳ Esperando a que se llene la sala (${datos.jugadores.length}/${datos.total_necesario})...`;
         }
+    }
+
+    if (datos.tipo === "FASE_ESCRITURA") {
+        if (miNombre) mostrarSeccionEscritura(datos.jugadores);
     }
 
     if (datos.tipo === "EMPEZAR_JUEGO") {
@@ -19,13 +34,13 @@ socket.onmessage = (event) => {
     }
 
     if (datos.tipo === "NUEVA_VOTACION") {
-        panelVoto.style.display = "block";
+        document.getElementById('panel-voto').style.display = "block";
         document.getElementById('texto-voto').innerText = `¿Ha pasado: "${datos.texto}"? (Punto para ${datos.nombre})`;
         resetearBotonesVoto();
     }
 
     if (datos.tipo === "RESULTADO_FINAL") {
-        panelVoto.style.display = "none";
+        document.getElementById('panel-voto').style.display = "none";
         if (datos.aprobado) {
             const casilla = document.getElementById(datos.casilla_id);
             if (datos.jugador_que_reclamo === miNombre && casilla) {
@@ -37,10 +52,6 @@ socket.onmessage = (event) => {
         if (datos.ganador_partida) mostrarPantallaFinal(datos.ganador_partida, datos.puntuaciones);
     }
 
-    if (datos.tipo === "ACTUALIZACION_MARCADOR") {
-        actualizarMarcador(datos.puntuaciones);
-    }
-    
     if (datos.tipo === "RESET_GLOBAL") {
         localStorage.clear();
         location.reload();
@@ -51,21 +62,23 @@ async function enviarRegistro(nombre) {
     miNombre = nombre;
     localStorage.setItem("nombreBingo", nombre);
     
-    const respuesta = await fetch(`${URL_BASE}/unirse`, {
-        method: 'POST',
-        headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({ nombre: nombre })
-    });
-    const datos = await respuesta.json();
+    try {
+        const respuesta = await fetch(`${URL_BASE}/unirse`, {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({ nombre: nombre })
+        });
+        const datos = await respuesta.json();
 
-    if (datos.status === "ok") {
-        if (datos.empezar) {
-            mostrarSeccionEscritura(datos.jugadores);
-        } else {
-            document.getElementById('seccion-registro').innerHTML = 
-                `⏳ Esperando a que se llene la sala (${datos.jugadores.length}/8)...`;
+        if (datos.status === "ok") {
+            if (datos.empezar) {
+                mostrarSeccionEscritura(datos.jugadores);
+            } else {
+                document.getElementById('seccion-registro').innerHTML = 
+                    `⏳ Esperando a que se llene la sala (${datos.jugadores.length}/${MIN_JUGADORES})...`;
+            }
         }
-    }
+    } catch (e) { console.error("Error al unirse", e); }
 }
 
 function mostrarSeccionEscritura(listaJugadores) {
@@ -77,11 +90,9 @@ function mostrarSeccionEscritura(listaJugadores) {
 function generarCamposEscritura(jugadores) {
     const contenedor = document.getElementById('contenedor-inputs-casillas');
     contenedor.innerHTML = ""; 
-    
     const otros = jugadores.filter(j => j !== miNombre);
     otros.forEach(n => crearInputFrase(contenedor, `Sobre ${n}:`));
     crearInputFrase(contenedor, "General:");
-    
     document.getElementById('btn-confirmar-frases').style.display = "block";
 }
 
@@ -96,7 +107,6 @@ function crearInputFrase(padre, etiqueta) {
 document.getElementById('btn-confirmar-frases').onclick = () => {
     const frases = Array.from(document.querySelectorAll('.input-frase')).map(i => i.value).filter(v => v);
     localStorage.setItem("bingo_mis_frases", JSON.stringify(frases));
-    
     fetch(`${URL_BASE}/listo-para-jugar`, {
         method: 'POST',
         headers: {'Content-Type': 'application/json'},
@@ -129,7 +139,8 @@ function dibujarTableroBingo() {
 
 function enviarVoto(eleccion, idBtn) {
     resetearBotonesVoto();
-    document.getElementById(idBtn).classList.add('seleccionado');
+    const btn = document.getElementById(idBtn);
+    if(btn) btn.classList.add('seleccionado');
     fetch(`${URL_BASE}/votar`, {
         method: 'POST',
         headers: {'Content-Type': 'application/json'},
@@ -138,10 +149,10 @@ function enviarVoto(eleccion, idBtn) {
 }
 
 function resetearBotonesVoto() {
-    const btnSi = document.getElementById('btn-si');
-    const btnNo = document.getElementById('btn-no');
-    if(btnSi) btnSi.classList.remove('seleccionado');
-    if(btnNo) btnNo.classList.remove('seleccionado');
+    const bSi = document.getElementById('btn-si');
+    const bNo = document.getElementById('btn-no');
+    if(bSi) bSi.classList.remove('seleccionado');
+    if(bNo) bNo.classList.remove('seleccionado');
 }
 
 function actualizarMarcador(puntos) {
@@ -153,18 +164,6 @@ function actualizarMarcador(puntos) {
         li.innerText = `${n}: ${p}`;
         lista.appendChild(li);
     });
-}
-
-function mostrarPantallaFinal(ganador, puntuaciones) {
-    document.getElementById('pantalla-juego').style.display = "none";
-    let finalDiv = document.getElementById('pantalla-final') || document.createElement('div');
-    finalDiv.id = "pantalla-final";
-    const ranking = Object.entries(puntuaciones).sort((a,b)=>b[1]-a[1])
-        .map(([n,p], i) => `<div>${i===0?'🥇':''} ${n}: ${p} pts</div>`).join("");
-    finalDiv.innerHTML = `<h1>👑 ¡Fin de la partida! 👑</h1><h2>Ganador: ${ganador}</h2><div class="ranking">${ranking}</div>
-                          <button onclick="reinicioMaestro()">Reiniciar Todo</button>`;
-    document.body.appendChild(finalDiv);
-    if (typeof confetti === 'function') confetti();
 }
 
 function reinicioMaestro() {
