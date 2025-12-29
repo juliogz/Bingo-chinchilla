@@ -1,4 +1,4 @@
-const socket = new WebSocket('ws://bingo-backend-rdqx.onrender.com/ws');
+const socket = new WebSocket('wss://bingo-backend-rdqx.onrender.com/ws');
 let miNombre = localStorage.getItem("nombreBingo");
 const panelVoto = document.getElementById('panel-voto');
 
@@ -166,3 +166,4 @@ function mostrarPantallaFinal(ganador, puntuaciones, titulo = "👑 ¡Fin de la 
 function reinicioMaestro() {
     fetch(' https://bingo-backend-rdqx.onrender.com/reset-total', { method: 'POST' });
 }
+
