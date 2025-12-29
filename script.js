@@ -166,4 +166,3 @@ function mostrarPantallaFinal(ganador, puntuaciones, titulo = "👑 ¡Fin de la 
 function reinicioMaestro() {
     fetch(' https://bingo-backend-rdqx.onrender.com/reset-total', { method: 'POST' });
 }
-
