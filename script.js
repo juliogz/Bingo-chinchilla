@@ -68,12 +68,21 @@ document.getElementById('form-registro').onsubmit = (e) => {
 
 function generarCamposEscritura(jugadores) {
     const contenedor = document.getElementById('contenedor-inputs-casillas');
-    contenedor.innerHTML = "";
+    
+    // ESTA LÍNEA ES LA QUE FALTA O ESTÁ FALLANDO:
+    // Borra todo lo anterior antes de dibujar lo nuevo
+    contenedor.innerHTML = ""; 
+    
+    // Filtramos para no escribir sobre nosotros mismos
     const otrosJugadores = jugadores.filter(j => j !== miNombre);
+    
     otrosJugadores.forEach(nombre => {
         crearInputFrase(contenedor, `Sobre ${nombre}:`);
     });
+    
+    // Añadimos la caja general al final
     crearInputFrase(contenedor, "General:");
+    
     document.getElementById('btn-confirmar-frases').style.display = "block";
 }
 
@@ -161,4 +170,5 @@ function mostrarPantallaFinal(ganador, puntuaciones, titulo = "👑 ¡Fin de la 
 function reinicioMaestro() {
     fetch('https://bingo-backend-rdqx.onrender.com/reset-total', { method: 'POST' });
 }
+
 
