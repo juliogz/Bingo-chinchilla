@@ -14,12 +14,12 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# --- CONFIGURACIÓN ---
+# --- CONFIGURACIÓN FINAL ---
 MIN_JUGADORES = 2  
-# ---------------------
+# ---------------------------
 
 puntuaciones: Dict[str, int] = {}
-jugadores_listos = [] # Nombres de quienes ya enviaron sus frases
+jugadores_listos = [] 
 juego_iniciado = False
 meta_victoria = 0
 frase_actual = {"texto": "", "nombre": "", "casilla_id": ""}
@@ -47,7 +47,6 @@ async def unirse_juego(jugador: Jugador):
     
     lista_jugadores = list(puntuaciones.keys())
     
-    # Si el juego ya arrancó (fase tablero), mandamos directo al tablero
     fase = "ESPERA"
     if len(jugadores_listos) >= len(puntuaciones) and len(puntuaciones) >= MIN_JUGADORES:
         fase = "TABLERO"
@@ -132,6 +131,7 @@ async def websocket_endpoint(websocket: WebSocket):
         while True: await websocket.receive_text()
     except WebSocketDisconnect:
         if websocket in websockets: websockets.remove(websocket)
+
 
 
 
