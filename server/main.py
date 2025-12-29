@@ -85,20 +85,31 @@ async def websocket_endpoint(websocket: WebSocket):
 async def unirse_juego(jugador: Jugador):
     global juego_iniciado, meta_victoria
     nombre = jugador.nombre
+    
+    # 1. Evitar que alguien entre si la partida ya empezó
     if juego_iniciado and nombre not in puntuaciones:
         return {"status": "error", "mensaje": "Partida en curso"}
+    
+    # 2. Registrar al jugador si es nuevo
     if nombre not in puntuaciones:
         puntuaciones[nombre] = 0
+    
+    # 3. Avisar a todos del nuevo marcador
     await avisar_a_todos({"tipo": "ACTUALIZACION_MARCADOR", "puntuaciones": puntuaciones})
-    if len(puntuaciones) >= MIN_JUGADORES and not juego_iniciado:
-        juego_iniciado = True
-        # La meta es el número de jugadores (n casillas por persona)
+    
+    # 4. CUANDO SE LLEGA AL MÍNIMO (o más):
+    # Enviamos a TODOS la lista actualizada de jugadores para que generen las cajas
+    if len(puntuaciones) >= MIN_JUGADORES:
+        # No bloqueamos el juego_iniciado aquí para permitir que 
+        # la lista de cajas se actualice si entra un 3º o 4º jugador.
         meta_victoria = len(puntuaciones)
+        
         await avisar_a_todos({
             "tipo": "FASE_ESCRITURA", 
             "meta": meta_victoria, 
             "jugadores": list(puntuaciones.keys())
         })
+        
     return {"status": "ok"}
 
 @app.post("/listo-para-jugar")
@@ -136,4 +147,5 @@ async def reset():
     juego_iniciado = False
     meta_victoria = None
     await avisar_a_todos({"tipo": "RESET_GLOBAL"})
+
     return {"status": "ok"}
