@@ -162,27 +162,83 @@ function actualizarMarcador(puntos) {
 }
 
 function mostrarPantallaFinal(ganador, puntuaciones) {
+    // Ocultamos lo demás por si acaso
     document.getElementById('pantalla-juego').style.display = "none";
-    let finalDiv = document.getElementById('pantalla-final') || document.createElement('div');
-    finalDiv.id = "pantalla-final";
-    document.body.appendChild(finalDiv);
     
-    const ranking = Object.entries(puntuaciones).sort((a,b)=>b[1]-a[1])
-        .map(([n,p], i) => `
-            <div style="display:flex; justify-content:space-between; padding:10px; background:rgba(255,255,255,0.1); margin:5px; border-radius:10px; font-size:1.2rem;">
-                <span>${i===0?'🥇':(i===1?'🥈':(i===2?'🥉':''))} ${n}</span>
-                <strong>${p} pts</strong>
-            </div>`).join("");
-        
+    let finalDiv = document.getElementById('pantalla-final');
+    if (!finalDiv) {
+        finalDiv = document.createElement('div');
+        finalDiv.id = "pantalla-final";
+        document.body.appendChild(finalDiv);
+    }
+
+    // Ordenamos el ranking
+    const ranking = Object.entries(puntuaciones)
+        .sort((a, b) => b[1] - a[1])
+        .map(([n, p], i) => {
+            let medalla = i === 0 ? '🥇' : (i === 1 ? '🥈' : (i === 2 ? '🥉' : '👤'));
+            return `
+            <div style="display:flex; justify-content:space-between; align-items:center; padding:12px 20px; background:rgba(255,255,255,0.1); margin:8px 0; border-radius:12px; font-size:1.3rem; border: 1px solid rgba(255,255,255,0.05);">
+                <span>${medalla} ${n}</span>
+                <strong style="color:#f1c40f">${p} pts</strong>
+            </div>`;
+        }).join("");
+
+    // Aplicamos el HTML y forzamos el estilo para que NO sea una rendija
     finalDiv.innerHTML = `
-        <div style="position:fixed; top:0; left:0; width:100%; height:100%; background:linear-gradient(135deg, #2c3e50, #000); color:white; z-index:10000; display:flex; flex-direction:column; align-items:center; justify-content:center; font-family:sans-serif; overflow-y:auto; padding:20px;">
-            <h1 style="font-size:3rem; margin:0; color:#f1c40f; text-shadow: 0 0 20px #f1c40f;">BINGO! 🥂</h1>
-            <h2 style="font-size:1.5rem; margin-bottom:30px;">¡${ganador} ha ganado la noche!</h2>
-            <div style="width:100%; max-width:400px; background:rgba(0,0,0,0.5); padding:20px; border-radius:20px; border:1px solid #f1c40f; margin-bottom:30px;">
-                <h3 style="text-align:center; border-bottom:1px solid #333; padding-bottom:10px;">RANKING FINAL</h3>
-                ${ranking}
+        <div style="
+            position: fixed; 
+            top: 0; 
+            left: 0; 
+            width: 100vw; 
+            height: 100vh; 
+            background: radial-gradient(circle at center, #1a2a6c, #b21f1f, #fdbb2d);
+            background-size: 400% 400%;
+            animation: gradientBG 15s ease infinite;
+            color: white; 
+            z-index: 99999; 
+            display: flex; 
+            flex-direction: column; 
+            align-items: center; 
+            justify-content: center; 
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            padding: 20px;
+            box-sizing: border-box;
+        ">
+            <style>
+                @keyframes gradientBG {
+                    0% { background-position: 0% 50%; }
+                    50% { background-position: 100% 50%; }
+                    100% { background-position: 0% 50%; }
+                }
+            </style>
+            
+            <h1 style="font-size: clamp(3rem, 10vw, 5rem); margin: 0; color:#fff; text-shadow: 0 0 20px rgba(255,255,255,0.5); text-align:center;">¡BINGO! 🥂</h1>
+            <h2 style="font-size: 1.8rem; margin: 10px 0 30px 0; text-align:center; font-weight: 300;">¡<span style="color:#f1c40f; font-weight:bold;">${ganador}</span> ha ganado la noche!</h2>
+            
+            <div style="width:100%; max-width:450px; background:rgba(0,0,0,0.6); padding:25px; border-radius:30px; border:2px solid rgba(241, 196, 15, 0.3); backdrop-filter: blur(10px); box-shadow: 0 20px 50px rgba(0,0,0,0.5);">
+                <h3 style="text-align:center; border-bottom:1px solid rgba(255,255,255,0.1); padding-bottom:15px; margin-top:0; letter-spacing: 2px;">RANKING FINAL</h3>
+                <div style="max-height: 40vh; overflow-y: auto; padding-right: 5px;">
+                    ${ranking}
+                </div>
             </div>
-            <button onclick="reinicioMaestro()" style="background:#f1c40f; color:black; border:none; padding:15px 40px; font-size:1.2rem; font-weight:bold; border-radius:50px; cursor:pointer; box-shadow: 0 10px 0 #b7950b;">NUEVA PARTIDA</button>
+            
+            <button onclick="reinicioMaestro()" style="
+                margin-top: 40px;
+                background: #f1c40f; 
+                color: #000; 
+                border: none; 
+                padding: 18px 50px; 
+                font-size: 1.4rem; 
+                font-weight: bold; 
+                border-radius: 50px; 
+                cursor: pointer; 
+                transition: transform 0.2s;
+                box-shadow: 0 8px 0 #b7950b;
+            " onmousedown="this.style.transform='translateY(4px)'; this.style.boxShadow='0 4px 0 #b7950b'" 
+               onmouseup="this.style.transform='translateY(0)'; this.style.boxShadow='0 8px 0 #b7950b'">
+                NUEVA PARTIDA 🔄
+            </button>
         </div>`;
 }
 
@@ -192,6 +248,7 @@ document.getElementById('form-registro').onsubmit = (e) => {
     e.preventDefault();
     enviarRegistro(document.getElementById('input-nombre').value);
 };
+
 
 
 
