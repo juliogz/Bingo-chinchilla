@@ -19,7 +19,7 @@ MIN_JUGADORES = 2
 # ---------------------
 
 puntuaciones: Dict[str, int] = {}
-jugadores_listos = []
+jugadores_listos = [] # Nombres de quienes ya enviaron sus frases
 juego_iniciado = False
 meta_victoria = 0
 frase_actual = {"texto": "", "nombre": "", "casilla_id": ""}
@@ -46,31 +46,37 @@ async def unirse_juego(jugador: Jugador):
         puntuaciones[nombre] = 0
     
     lista_jugadores = list(puntuaciones.keys())
-    num_actual = len(lista_jugadores)
-
-    # Si llegamos al mínimo, disparamos el inicio
-    if num_actual >= MIN_JUGADORES:
-        juego_iniciado = True
-        meta_victoria = num_actual
-        await avisar_a_todos({
-            "tipo": "FASE_ESCRITURA", 
-            "jugadores": lista_jugadores
-        })
-        return {"status": "ok", "jugadores": lista_jugadores, "empezar": True}
     
-    # Si no, avisamos a los que ya están dentro para que actualicen su contador n/MIN
+    # Si el juego ya arrancó (fase tablero), mandamos directo al tablero
+    fase = "ESPERA"
+    if len(jugadores_listos) >= len(puntuaciones) and len(puntuaciones) >= MIN_JUGADORES:
+        fase = "TABLERO"
+    elif len(puntuaciones) >= MIN_JUGADORES:
+        fase = "ESCRITURA"
+
+    if len(puntuaciones) >= MIN_JUGADORES and not juego_iniciado:
+        juego_iniciado = True
+        meta_victoria = len(puntuaciones)
+        await avisar_a_todos({"tipo": "FASE_ESCRITURA", "jugadores": lista_jugadores})
+
     await avisar_a_todos({
         "tipo": "ACTUALIZACION_LOBBY",
         "jugadores": lista_jugadores,
         "total_necesario": MIN_JUGADORES
     })
     
-    return {"status": "ok", "jugadores": lista_jugadores, "empezar": False}
+    return {
+        "status": "ok", 
+        "jugadores": lista_jugadores, 
+        "fase": fase,
+        "ya_listo": nombre in jugadores_listos
+    }
 
 @app.post("/listo-para-jugar")
 async def listo_para_jugar(jugador: Jugador):
     if jugador.nombre not in jugadores_listos:
         jugadores_listos.append(jugador.nombre)
+    
     if len(jugadores_listos) >= len(puntuaciones) and len(puntuaciones) >= MIN_JUGADORES:
         await avisar_a_todos({"tipo": "EMPEZAR_JUEGO"})
     return {"status": "ok"}
@@ -92,11 +98,19 @@ async def votar(data: dict):
     
     if len(votos_actuales["votantes"]) >= (len(puntuaciones) - 1):
         aprobado = votos_actuales["si"] > votos_actuales["no"]
-        if aprobado: puntuaciones[frase_actual["nombre"]] += 1
-        ganador_partida = frase_actual["nombre"] if puntuaciones[frase_actual["nombre"]] >= meta_victoria else None
+        if aprobado: 
+            puntuaciones[frase_actual["nombre"]] += 1
+        
+        ganador_partida = None
+        if puntuaciones[frase_actual["nombre"]] >= meta_victoria:
+            ganador_partida = frase_actual["nombre"]
+
         await avisar_a_todos({
-            "tipo": "RESULTADO_FINAL", "aprobado": aprobado, "puntuaciones": puntuaciones,
-            "jugador_que_reclamo": frase_actual["nombre"], "casilla_id": frase_actual["casilla_id"],
+            "tipo": "RESULTADO_FINAL", 
+            "aprobado": aprobado, 
+            "puntuaciones": puntuaciones,
+            "jugador_que_reclamo": frase_actual["nombre"], 
+            "casilla_id": frase_actual["casilla_id"],
             "ganador_partida": ganador_partida
         })
     return {"status": "ok"}
@@ -118,5 +132,6 @@ async def websocket_endpoint(websocket: WebSocket):
         while True: await websocket.receive_text()
     except WebSocketDisconnect:
         if websocket in websockets: websockets.remove(websocket)
+
 
 
