@@ -21,7 +21,7 @@ URL: str = os.environ.get("SUPABASE_URL", "")
 KEY: str = os.environ.get("SUPABASE_KEY", "")
 supabase: Client = create_client(URL, KEY)
 
-# --- ESTADO EN MEMORIA (Se sincroniza con Supabase) ---
+# --- ESTADO GLOBAL ---
 MIN_JUGADORES = 7
 TIEMPO_VOTO = 900
 puntuaciones: Dict[str, int] = {}
@@ -33,7 +33,9 @@ votos_actuales = {"si": 0, "no": 0, "votantes": []}
 websockets: List[WebSocket] = []
 tarea_temporizador = None
 
-# Al arrancar el servidor, intentamos recuperar datos antiguos
+class Jugador(BaseModel):
+    nombre: str
+
 @app.on_event("startup")
 async def startup_event():
     global puntuaciones
@@ -42,13 +44,14 @@ async def startup_event():
         if res.data:
             for fila in res.data:
                 puntuaciones[fila["nombre"]] = fila["puntos"]
-            print("Datos cargados de Supabase")
-    except:
-        print("No se pudo cargar de Supabase (tablas no creadas aún)")
+    except Exception as e:
+        print(f"Error cargando DB: {e}")
 
 async def guardar_en_db(nombre, puntos):
-    # Esto guarda o actualiza el punto en Supabase
-    supabase.table("partida").upsert({"nombre": nombre, "puntos": puntos}).execute()
+    try:
+        supabase.table("partida").upsert({"nombre": nombre, "puntos": puntos}).execute()
+    except Exception as e:
+        print(f"Error guardando en DB: {e}")
 
 async def avisar_a_todos(data: dict):
     for ws in websockets:
@@ -87,15 +90,76 @@ async def unirse_juego(jugador: Jugador):
     await avisar_a_todos({"tipo": "ACTUALIZACION_LOBBY", "jugadores": list(puntuaciones.keys()), "total_necesario": MIN_JUGADORES})
     return {"status": "ok"}
 
-# ... (El resto de funciones: votar, iniciar-votacion, etc., se quedan igual que el código anterior) ...
-# Solo asegúrate de llamar a `await guardar_en_db(nombre, puntos)` dentro de `finalizar_votacion_logica` cuando alguien gane un punto.
+@app.post("/listo-para-jugar")
+async def listo_para_jugar(jugador: Jugador):
+    if jugador.nombre not in jugadores_listos:
+        jugadores_listos.append(jugador.nombre)
+    if len(jugadores_listos) >= len(puntuaciones) and len(puntuaciones) >= MIN_JUGADORES:
+        await avisar_a_todos({"tipo": "EMPEZAR_JUEGO"})
+    return {"status": "ok"}
+
+@app.post("/iniciar-votacion")
+async def iniciar_votacion(data: dict):
+    global frase_actual, votos_actuales, tarea_temporizador
+    if tarea_temporizador: tarea_temporizador.cancel()
+    frase_actual = {"texto": data['texto'], "nombre": data['nombre_jugador'], "casilla_id": data['casilla_id']}
+    votos_actuales = {"si": 0, "no": 0, "votantes": []}
+    await avisar_a_todos({"tipo": "NUEVA_VOTACION", "texto": data['texto'], "nombre": data['nombre_jugador']})
+    tarea_temporizador = asyncio.create_task(temporizador_votacion(TIEMPO_VOTO))
+    return {"status": "ok"}
+
+async def temporizador_votacion(segundos: int):
+    try:
+        await asyncio.sleep(segundos)
+        await finalizar_votacion_logica()
+    except asyncio.CancelledError: pass
+
+@app.post("/votar")
+async def votar(data: dict):
+    global votos_actuales, tarea_temporizador
+    if not frase_actual["nombre"]: return {"status": "error"}
+    if data['nombre_jugador'] in votos_actuales["votantes"]: return {"status": "ya_votado"}
+    votos_actuales[data['eleccion']] += 1
+    votos_actuales["votantes"].append(data['nombre_jugador'])
+    if len(votos_actuales["votantes"]) >= (len(puntuaciones) - 1):
+        if tarea_temporizador: tarea_temporizador.cancel()
+        await finalizar_votacion_logica()
+    return {"status": "ok"}
+
+async def finalizar_votacion_logica():
+    global votos_actuales, frase_actual
+    if not frase_actual["nombre"]: return
+    aprobado = votos_actuales["si"] > votos_actuales["no"]
+    if aprobado: 
+        nombre_ganador = frase_actual["nombre"]
+        puntuaciones[nombre_ganador] += 1
+        await guardar_en_db(nombre_ganador, puntuaciones[nombre_ganador])
+    
+    ganador_partida = frase_actual["nombre"] if puntuaciones[frase_actual["nombre"]] >= meta_victoria else None
+    await avisar_a_todos({
+        "tipo": "RESULTADO_FINAL", 
+        "aprobado": aprobado, "puntuaciones": puntuaciones,
+        "jugador_que_reclamo": frase_actual["nombre"], "casilla_id": frase_actual["casilla_id"],
+        "ganador_partida": ganador_partida
+    })
+    frase_actual = {"texto": "", "nombre": "", "casilla_id": ""}
 
 @app.post("/reset-total")
 async def reset_total():
     global puntuaciones, jugadores_listos, juego_iniciado, frase_actual
     puntuaciones, jugadores_listos, juego_iniciado = {}, [], False
     frase_actual = {"texto": "", "nombre": "", "casilla_id": ""}
-    # Borrar base de datos
-    supabase.table("partida").delete().neq("nombre", "xxx").execute()
+    try:
+        supabase.table("partida").delete().neq("nombre", "xxx").execute()
+    except: pass
     await avisar_a_todos({"tipo": "RESET_GLOBAL"})
     return {"status": "ok"}
+
+@app.websocket("/ws")
+async def websocket_endpoint(websocket: WebSocket):
+    await websocket.accept()
+    websockets.append(websocket)
+    try:
+        while True: await websocket.receive_text()
+    except WebSocketDisconnect:
+        if websocket in websockets: websockets.remove(websocket)
