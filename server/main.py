@@ -16,6 +16,10 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# --- CLASES DE DATOS ---
+class Jugador(BaseModel):
+    nombre: str
+
 # --- CONEXIÓN SUPABASE ---
 URL: str = os.environ.get("SUPABASE_URL", "")
 KEY: str = os.environ.get("SUPABASE_KEY", "")
@@ -32,9 +36,6 @@ frase_actual = {"texto": "", "nombre": "", "casilla_id": ""}
 votos_actuales = {"si": 0, "no": 0, "votantes": []}
 websockets: List[WebSocket] = []
 tarea_temporizador = None
-
-class Jugador(BaseModel):
-    nombre: str
 
 @app.on_event("startup")
 async def startup_event():
