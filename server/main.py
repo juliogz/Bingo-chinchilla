@@ -26,7 +26,7 @@ KEY: str = os.environ.get("SUPABASE_KEY", "")
 supabase: Client = create_client(URL, KEY)
 
 # --- ESTADO GLOBAL ---
-MIN_JUGADORES = 7
+MIN_JUGADORES = 3
 TIEMPO_VOTO = 900
 puntuaciones: Dict[str, int] = {}
 jugadores_listos = [] 
